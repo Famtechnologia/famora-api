@@ -71,4 +71,4 @@ ENV PORT=8000
 EXPOSE 8000
 
 # Run Prisma migrations then start the server
-CMD ["sh", "-c", "npx prisma db push --skip-generate && node dist/main"]
+CMD ["sh", "-c", "npx prisma db push && node dist/main"]
