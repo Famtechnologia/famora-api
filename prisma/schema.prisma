@@ -1,0 +1,174 @@
+datasource db {
+  provider = "sqlite"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum UserRole {
+  FARMER
+  BUYER
+  EXPORTER
+  LIVESTOCK_PRODUCER
+  ADMIN
+}
+
+enum OrderStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+}
+
+enum AuctionStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum DocStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+}
+
+model User {
+  id                    String        @id @default(uuid())
+  phoneNumber           String?       @unique
+  email                 String?       @unique
+  name                  String
+  role                  UserRole      @default(FARMER)
+  isVerified            Boolean       @default(false)
+  farmLocation          String?
+  farmCoordinates       String?       // GPS coords (e.g. "6.5244,3.3792")
+  region                String?       // e.g. "Kano", "Lagos", "Ibadan"
+  categorySubscriptions String?       // Subscribed price categories (comma-separated, e.g. "Grains,Vegetables")
+  smsAlertActive        Boolean       @default(false)
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+
+  listings              Listing[]
+  orders                Order[]
+  sentMessages          ChatMessage[]
+  auctionsWon           Auction[]     @relation("HighestBidder")
+  bids                  Bid[]
+  exportDocuments       ExportDocument[]
+}
+
+model OtpCode {
+  id        String   @id @default(uuid())
+  target    String   // Phone number or email
+  code      String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model Listing {
+  id                   String      @id @default(uuid())
+  title                String
+  description          String?
+  price                Float
+  quantity             Float
+  unit                 String      // e.g. "kg", "bag", "head", "ton"
+  category             String      // GRAINS, VEGETABLES, LIVESTOCK, PIG_FARMING, B2B_SUPPLY, EXPORT
+  imageUrl             String?
+  harvestDate          DateTime?
+  originCoordinates    String?     // e.g. "7.3775,3.9470" (Ibadan)
+  qualityCertification String?     // e.g. "Organic", "Standard"
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+
+  farmerId             String
+  farmer               User        @relation(fields: [farmerId], references: [id], onDelete: Cascade)
+
+  // Specialized fields
+  breed                String?     // For livestock / pig farming
+  healthRecords        String?     // JSON/Text of medical history
+  weight               Float?      // In kg
+
+  exportCompliant      Boolean     @default(false)
+  customsCleared       Boolean     @default(false)
+
+  orders               Order[]
+  auction              Auction?
+}
+
+model Order {
+  id         String      @id @default(uuid())
+  quantity   Float
+  totalPrice Float
+  status     OrderStatus @default(PENDING)
+  syncId     String?     // Correlates offline queued order IDs
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  buyerId    String
+  buyer      User        @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  listingId  String
+  listing    Listing     @relation(fields: [listingId], references: [id], onDelete: Cascade)
+}
+
+model MarketPrice {
+  id         String   @id @default(uuid())
+  hubName    String   // Mile 12, Bodija, Onitsha, Kano Dawanau, Aba Market
+  commodity  String   // Maize, Tomatoes, Cassava, Pork, Poultry, etc.
+  price      Float
+  unit       String   // e.g. "100kg bag", "crate", "kg"
+  recordedAt DateTime @default(now())
+}
+
+model ChatMessage {
+  id           String   @id @default(uuid())
+  chatRoom     String   // "grains-niche", "expert-qa", or buyer-seller private room ID
+  message      String?
+  voiceNoteUrl String?
+  createdAt    DateTime @default(now())
+
+  senderId     String
+  sender       User     @relation(fields: [senderId], references: [id], onDelete: Cascade)
+}
+
+model Auction {
+  id              String        @id @default(uuid())
+  startPrice      Float
+  reservePrice    Float
+  currentBid      Float         @default(0)
+  endsAt          DateTime
+  status          AuctionStatus @default(ACTIVE)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  listingId       String        @unique
+  listing         Listing       @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  highestBidderId String?
+  highestBidder   User?         @relation("HighestBidder", fields: [highestBidderId], references: [id])
+
+  bids            Bid[]
+}
+
+model Bid {
+  id             String   @id @default(uuid())
+  amount         Float
+  isProxy        Boolean  @default(false)
+  maxProxyAmount Float?
+  createdAt      DateTime @default(now())
+
+  auctionId      String
+  auction        Auction  @relation(fields: [auctionId], references: [id], onDelete: Cascade)
+  bidderId       String
+  bidder         User     @relation(fields: [bidderId], references: [id], onDelete: Cascade)
+}
+
+model ExportDocument {
+  id           String    @id @default(uuid())
+  documentType String    // Phytosanitary Certificate, Customs Form, Certificate of Origin, etc.
+  data         String    // JSON stringified document values
+  status       DocStatus @default(DRAFT)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}

@@ -1,0 +1,23 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: famora-api
+    ports:
+      - "${PORT:-8000}:8000"
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=file:/app/data/famora.db
+    volumes:
+      # Persist SQLite database across container restarts
+      - db-data:/app/data
+      # Persist uploaded files (local fallback)
+      - uploads:/app/public
+    restart: unless-stopped
+
+volumes:
+  db-data:
+  uploads:

@@ -1,0 +1,33 @@
+# Dependencies (rebuilt inside the container)
+node_modules
+
+# Build artifacts
+dist
+
+# Local dev database
+*.db
+*.db-journal
+
+# Environment (injected at runtime, not baked in)
+.env
+.env.*
+
+# IDE / OS
+.vscode
+.idea
+*.swp
+.DS_Store
+
+# Git
+.git
+.gitignore
+
+# Docker (prevent recursive context)
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# Test / CI
+coverage
+test
+*.spec.ts
