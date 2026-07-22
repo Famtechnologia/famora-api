@@ -1,3 +1,8 @@
+// Prisma 7 no longer reads .env by itself, and the CLI resolves this file
+// before the application ever starts. Without this, `prisma db push` and
+// friends see no DATABASE_URL when run locally. Real environment variables
+// still win, so deployed environments are unaffected.
+import "dotenv/config";
 import { defineConfig } from "prisma/config";
 
 export default defineConfig({
