@@ -37,6 +37,7 @@ model User {
   id                    String        @id @default(uuid())
   phoneNumber           String?       @unique
   email                 String?       @unique
+  password              String?       // bcrypt hash. Null for accounts created via OTP, which have no password.
   name                  String
   role                  UserRole      @default(FARMER)
   isVerified            Boolean       @default(false)
