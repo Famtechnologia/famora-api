@@ -270,6 +270,35 @@ export class AuthService {
     };
   }
 
+  /**
+   * Trade a valid session token for a fresh one.
+   *
+   * Without this a token simply runs out and the user is signed out mid-use.
+   * An app can call this on launch to keep an active user signed in
+   * indefinitely, while someone who stops using the app is still logged out
+   * once their last token expires.
+   */
+  async refreshSession(user: {
+    id: string;
+    email: string | null;
+    phoneNumber: string | null;
+  }): Promise<{
+    success: boolean;
+    isNewUser: boolean;
+    token: string;
+    user: any;
+  }> {
+    const target = user.email ?? user.phoneNumber ?? '';
+    const token = this.jwtService.sign({ sub: user.id, target });
+
+    return {
+      success: true,
+      isNewUser: false,
+      token,
+      user: this.withoutPassword(user as any),
+    };
+  }
+
   async forgotPassword(
     dto: ForgotPasswordDto,
   ): Promise<{ success: boolean; message: string }> {

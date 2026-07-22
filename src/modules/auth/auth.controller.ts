@@ -1,6 +1,8 @@
-import { Controller, Post, Body, Headers, HttpCode, BadRequestException } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiHeader } from '@nestjs/swagger';
+import { Controller, Post, Body, Headers, HttpCode, UseGuards, BadRequestException } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiHeader, ApiBearerAuth } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AuthService } from './auth.service';
 import { SendOtpDto } from './dto/send-otp.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
@@ -104,6 +106,21 @@ export class AuthController {
   @ApiResponse({ status: 401, description: 'Email or password incorrect, or the account has no password set.' })
   async login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
+  }
+
+  @Post('refresh')
+  @HttpCode(200)
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('bearer')
+  @ApiOperation({
+    summary: 'Exchange a valid session token for a fresh one',
+    description:
+      'Extends a session without asking the user to sign in again. Call it while the current token is still valid — an expired one is rejected like any other.',
+  })
+  @ApiResponse({ status: 200, description: 'Returns a new session JWT token.' })
+  @ApiResponse({ status: 401, description: 'Token missing, expired or invalid.' })
+  async refresh(@CurrentUser() user: any) {
+    return this.authService.refreshSession(user);
   }
 
   @Post('password/forgot')
