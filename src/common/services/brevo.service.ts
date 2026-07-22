@@ -11,8 +11,10 @@ export class BrevoService {
 
   constructor(private configService: ConfigService) {
     this.apiKey = this.configService.get<string>('BREVO_API_KEY') || '';
-    this.senderEmail = this.configService.get<string>('BREVO_SENDER_EMAIL') || 'no-reply@famtech.org';
-    this.senderName = this.configService.get<string>('BREVO_SENDER_NAME') || 'Famtech Africa';
+    // famtech.org is not a domain we own; mail from it was silently dropped.
+    // famtech.llc is the authenticated sending domain.
+    this.senderEmail = this.configService.get<string>('BREVO_SENDER_EMAIL') || 'no-reply@famtech.llc';
+    this.senderName = this.configService.get<string>('BREVO_SENDER_NAME') || 'Famora';
   }
 
   async sendEmail(to: string, subject: string, htmlContent: string): Promise<boolean> {
@@ -57,34 +59,34 @@ export class BrevoService {
   async sendOtp(to: string, code: string): Promise<boolean> {
     const htmlContent = `
       <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
-        <h2>Famtech Africa Account Verification</h2>
-        <p>You requested a one-time verification code for your Famtech account.</p>
+        <h2>Your Famora verification code</h2>
+        <p>You asked for a verification code for your Famora account.</p>
         <div style="background-color: #f4f4f4; padding: 15px; border-radius: 5px; font-size: 24px; font-weight: bold; letter-spacing: 2px; text-align: center; margin: 20px 0;">
           ${code}
         </div>
-        <p>This code will expire in 5 minutes. If you did not request this, you can ignore this email.</p>
+        <p>This code will expire in 5 minutes. If you did not ask for it, you can ignore this email.</p>
         <br>
         <p>Best regards,</p>
-        <p><strong>Famtech Africa Team</strong></p>
+        <p><strong>The Famora Team</strong></p>
       </div>
     `;
-    return this.sendEmail(to, 'Famtech OTP Verification Code', htmlContent);
+    return this.sendEmail(to, 'Your Famora verification code', htmlContent);
   }
 
   async sendPasswordReset(to: string, code: string): Promise<boolean> {
     const htmlContent = `
       <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
-        <h2>Reset your Famtech Africa password</h2>
-        <p>We received a request to reset the password on your Famtech account. Enter this code to choose a new one.</p>
+        <h2>Reset your Famora password</h2>
+        <p>We received a request to reset the password on your Famora account. Enter this code to choose a new one.</p>
         <div style="background-color: #f4f4f4; padding: 15px; border-radius: 5px; font-size: 24px; font-weight: bold; letter-spacing: 2px; text-align: center; margin: 20px 0;">
           ${code}
         </div>
         <p>This code will expire in 15 minutes. If you did not request a password reset, you can ignore this email — your password will not change.</p>
         <br>
         <p>Best regards,</p>
-        <p><strong>Famtech Africa Team</strong></p>
+        <p><strong>The Famora Team</strong></p>
       </div>
     `;
-    return this.sendEmail(to, 'Reset your Famtech password', htmlContent);
+    return this.sendEmail(to, 'Reset your Famora password', htmlContent);
   }
 }
