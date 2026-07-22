@@ -26,7 +26,8 @@ export class PriceHubService {
   }
 
   async getLatestPrices() {
-    // SQLite compatible query to get the most recent price record per (hubName, commodity)
+    // Most recent price record per (hubName, commodity). Grouped in memory
+    // rather than in SQL, so it holds on any database.
     const allPrices = await this.prisma.marketPrice.findMany({
       orderBy: { recordedAt: 'desc' },
     });

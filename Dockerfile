@@ -5,13 +5,6 @@ FROM node:24-slim AS deps
 
 WORKDIR /app
 
-# better-sqlite3 requires native compilation tools
-RUN apt-get update && apt-get install -y \
-    python3 \
-    make \
-    g++ \
-    && rm -rf /var/lib/apt/lists/*
-
 COPY package.json package-lock.json ./
 
 RUN npm ci
@@ -41,13 +34,6 @@ RUN npm run build
 FROM node:24-slim AS production
 
 WORKDIR /app
-
-# Runtime native-module support for better-sqlite3
-RUN apt-get update && apt-get install -y \
-    python3 \
-    make \
-    g++ \
-    && rm -rf /var/lib/apt/lists/*
 
 # Copy package manifests and install prod-only deps
 COPY package.json package-lock.json ./

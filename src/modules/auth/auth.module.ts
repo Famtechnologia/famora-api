@@ -5,6 +5,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
+import { requireJwtSecret, SESSION_TOKEN_TTL } from './jwt-secret';
 
 @Module({
   imports: [
@@ -12,8 +13,8 @@ import { JwtStrategy } from './strategies/jwt.strategy';
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({
-        secret: configService.get<string>('JWT_SECRET') || 'famtech-secret-key-10x-engineer',
-        signOptions: { expiresIn: '7d' },
+        secret: requireJwtSecret(configService),
+        signOptions: { expiresIn: SESSION_TOKEN_TTL },
       }),
       inject: [ConfigService],
     }),

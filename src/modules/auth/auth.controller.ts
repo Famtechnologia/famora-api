@@ -1,9 +1,16 @@
-import { Controller, Post, Body, Headers, BadRequestException } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiHeader } from '@nestjs/swagger';
+import { Controller, Post, Body, Headers, HttpCode, UseGuards, BadRequestException } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiHeader, ApiBearerAuth } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AuthService } from './auth.service';
 import { SendOtpDto } from './dto/send-otp.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { RegisterDto } from './dto/register.dto';
+import { SignUpDto } from './dto/signup.dto';
+import { LoginDto } from './dto/login.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 
 @ApiTags('Authentication')
 @Controller('auth')
@@ -69,5 +76,79 @@ export class AuthController {
       throw new BadRequestException('Missing x-registration-token header');
     }
     return this.authService.register(dto, regToken);
+  }
+
+  // ---- Email and password -------------------------------------------------
+
+  @Post('signup')
+  @ApiOperation({
+    summary: 'Create an account with an email and password',
+    description:
+      'Registers a new user directly, without an OTP round trip. The account starts unverified: neither the email nor the phone number has been proven at this point.',
+  })
+  @ApiResponse({ status: 201, description: 'Account created. Returns a session JWT token.' })
+  @ApiResponse({ status: 400, description: 'Validation failed, or the email or phone is already registered.' })
+  async signUp(@Body() dto: SignUpDto) {
+    return this.authService.signUp(dto);
+  }
+
+  @Post('login')
+  @HttpCode(200)
+  // Ten attempts a minute per IP. Enough for a person fumbling their password,
+  // far too slow to work through a password list.
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @ApiOperation({
+    summary: 'Sign in with an email and password',
+    description:
+      'Returns a session JWT token. Accounts created through the OTP flow have no password and are told to set one via password reset.',
+  })
+  @ApiResponse({ status: 200, description: 'Signed in. Returns a session JWT token.' })
+  @ApiResponse({ status: 401, description: 'Email or password incorrect, or the account has no password set.' })
+  async login(@Body() dto: LoginDto) {
+    return this.authService.login(dto);
+  }
+
+  @Post('refresh')
+  @HttpCode(200)
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('bearer')
+  @ApiOperation({
+    summary: 'Exchange a valid session token for a fresh one',
+    description:
+      'Extends a session without asking the user to sign in again. Call it while the current token is still valid — an expired one is rejected like any other.',
+  })
+  @ApiResponse({ status: 200, description: 'Returns a new session JWT token.' })
+  @ApiResponse({ status: 401, description: 'Token missing, expired or invalid.' })
+  async refresh(@CurrentUser() user: any) {
+    return this.authService.refreshSession(user);
+  }
+
+  @Post('password/forgot')
+  @HttpCode(200)
+  // Tighter than login: this one sends email, so abuse costs real money and
+  // lands the sender in spam filters.
+  @Throttle({ default: { limit: 5, ttl: 15 * 60_000 } })
+  @ApiOperation({
+    summary: 'Request a password reset code',
+    description:
+      'Emails a 6-digit reset code valid for 15 minutes. Always returns the same response whether or not the account exists, so it cannot be used to discover which emails are registered.',
+  })
+  @ApiResponse({ status: 200, description: 'Reset code sent if the account exists.' })
+  async forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.authService.forgotPassword(dto);
+  }
+
+  @Post('password/reset')
+  @HttpCode(200)
+  @Throttle({ default: { limit: 10, ttl: 15 * 60_000 } })
+  @ApiOperation({
+    summary: 'Set a new password using a reset code',
+    description:
+      'Consumes the 6-digit code from the reset email and sets a new password. Receiving the code proves control of the address, so the account is marked verified. Returns a session JWT token, signing the user straight in.',
+  })
+  @ApiResponse({ status: 200, description: 'Password changed. Returns a session JWT token.' })
+  @ApiResponse({ status: 400, description: 'Reset code invalid or expired.' })
+  async resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto);
   }
 }

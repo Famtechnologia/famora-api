@@ -10,14 +10,13 @@ services:
       - .env
     environment:
       - NODE_ENV=production
-      - DATABASE_URL=file:/app/data/famora.db
+      # DATABASE_URL comes from .env and must point at Postgres. It is not
+      # defaulted here: a container-local database loses everything on the
+      # next deploy.
     volumes:
-      # Persist SQLite database across container restarts
-      - db-data:/app/data
       # Persist uploaded files (local fallback)
       - uploads:/app/public
     restart: unless-stopped
 
 volumes:
-  db-data:
   uploads:
