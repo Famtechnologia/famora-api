@@ -45,6 +45,15 @@ export class SignUpDto {
   password: string;
 
   @ApiProperty({
+    description:
+      'The 6-digit code emailed to the address above by POST /auth/otp/send. Proves the person signing up controls the email.',
+    example: '123456',
+  })
+  @IsNotEmpty()
+  @IsString()
+  code: string;
+
+  @ApiProperty({
     description: 'The agricultural marketplace role of the user',
     enum: UserRole,
     example: UserRole.FARMER,

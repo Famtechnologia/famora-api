@@ -199,6 +199,24 @@ export class AuthService {
       );
     }
 
+    // The email must be proven before an account exists for it. The code was
+    // sent by /auth/otp/send; checked here rather than at send time so a code
+    // is never consumed by a signup that then fails the duplicate check above.
+    const otp = await this.prisma.otpCode.findFirst({
+      where: { target: email, code: dto.code },
+    });
+    if (!otp) {
+      throw new BadRequestException(
+        'That verification code is not correct. Check the code sent to your email.',
+      );
+    }
+    if (new Date() > otp.expiresAt) {
+      await this.prisma.otpCode.delete({ where: { id: otp.id } });
+      throw new BadRequestException(
+        'That verification code has expired. Request a new one.',
+      );
+    }
+
     const user = await this.prisma.user.create({
       data: {
         name: dto.name.trim(),
@@ -207,11 +225,14 @@ export class AuthService {
         password: await bcrypt.hash(dto.password, BCRYPT_ROUNDS),
         role: dto.role,
         region: dto.region || null,
-        // Signing up with a password proves control of neither the address nor
-        // the number, so the account starts unverified.
-        isVerified: false,
+        // The emailed code proves control of the address, so the account is
+        // verified from the moment it exists.
+        isVerified: true,
       },
     });
+
+    // Burn the code so it cannot be replayed for another signup.
+    await this.prisma.otpCode.delete({ where: { id: otp.id } });
 
     const token = this.jwtService.sign({ sub: user.id, target: email });
 
