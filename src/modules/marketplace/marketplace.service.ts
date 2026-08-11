@@ -107,7 +107,13 @@ export class MarketplaceService {
     return { success: true };
   }
 
-  async findAll(filters: { category?: string; search?: string; exportCompliant?: boolean }) {
+  async findAll(filters: {
+    category?: string;
+    search?: string;
+    exportCompliant?: boolean;
+    limit?: number;
+    cursor?: string;
+  }) {
     const where: any = {};
 
     if (filters.category) {
@@ -119,12 +125,18 @@ export class MarketplaceService {
     }
 
     if (filters.search) {
+      // `insensitive` so "maize" also matches "Maize" (Postgres LIKE is
+      // case-sensitive by default).
       where.OR = [
-        { title: { contains: filters.search } },
-        { description: { contains: filters.search } },
-        { breed: { contains: filters.search } },
+        { title: { contains: filters.search, mode: 'insensitive' } },
+        { description: { contains: filters.search, mode: 'insensitive' } },
+        { breed: { contains: filters.search, mode: 'insensitive' } },
       ];
     }
+
+    // Cursor pagination: the client passes the id of the last item it saw and
+    // we return the next page. `take` is clamped to a sane range.
+    const take = filters.limit && filters.limit > 0 ? Math.min(filters.limit, 100) : undefined;
 
     return this.prisma.listing.findMany({
       where,
@@ -140,6 +152,8 @@ export class MarketplaceService {
         },
       },
       orderBy: { createdAt: 'desc' },
+      ...(take ? { take } : {}),
+      ...(filters.cursor ? { cursor: { id: filters.cursor }, skip: 1 } : {}),
     });
   }
 
@@ -158,19 +172,22 @@ export class MarketplaceService {
 
   async createOrder(buyerId: string, dto: CreateOrderDto) {
     const listing = await this.findOne(dto.listingId);
-
-    if (listing.quantity < dto.quantity) {
-      throw new BadRequestException('Insufficient stock for this listing');
-    }
-
     const totalPrice = listing.price * dto.quantity;
 
-    // Transaction: Create order & deduct stock
+    // Transaction: atomically deduct stock, then create the order.
     return this.prisma.$transaction(async (tx) => {
-      await tx.listing.update({
-        where: { id: listing.id },
-        data: { quantity: listing.quantity - dto.quantity },
+      // Guarded, atomic decrement: the `quantity >= dto.quantity` predicate is
+      // evaluated by the database as part of the UPDATE, so concurrent orders
+      // cannot both pass a stale read and oversell. A count of 0 means another
+      // order got there first (or stock was insufficient to begin with).
+      const deducted = await tx.listing.updateMany({
+        where: { id: listing.id, quantity: { gte: dto.quantity } },
+        data: { quantity: { decrement: dto.quantity } },
       });
+
+      if (deducted.count === 0) {
+        throw new BadRequestException('Insufficient stock for this listing');
+      }
 
       return tx.order.create({
         data: {
@@ -236,19 +253,25 @@ export class MarketplaceService {
           continue;
         }
 
-        if (listing.quantity < orderEntry.quantity) {
-          errors.push(`Failed to sync order for syncId ${orderEntry.syncId}: Insufficient stock on listing "${listing.title}"`);
+        if (orderEntry.quantity <= 0) {
+          errors.push(`Failed to sync order for syncId ${orderEntry.syncId}: Quantity must be greater than 0`);
           continue;
         }
 
         const totalPrice = listing.price * orderEntry.quantity;
 
-        // Sync order in transaction
+        // Sync order in transaction, deducting stock atomically (see createOrder).
         await this.prisma.$transaction(async (tx) => {
-          await tx.listing.update({
-            where: { id: listing.id },
-            data: { quantity: listing.quantity - orderEntry.quantity },
+          const deducted = await tx.listing.updateMany({
+            where: { id: listing.id, quantity: { gte: orderEntry.quantity } },
+            data: { quantity: { decrement: orderEntry.quantity } },
           });
+
+          if (deducted.count === 0) {
+            throw new BadRequestException(
+              `Insufficient stock on listing "${listing.title}"`,
+            );
+          }
 
           await tx.order.create({
             data: {
