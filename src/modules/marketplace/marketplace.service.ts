@@ -1,6 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException, Logger } from '@nestjs/common';
+import { UserRole } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { CreateListingDto } from './dto/create-listing.dto';
+import { UpdateListingDto } from './dto/update-listing.dto';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { SyncOfflineDto } from './dto/sync-offline.dto';
 
@@ -30,6 +32,79 @@ export class MarketplaceService {
         farmerId,
       },
     });
+  }
+
+  async update(id: string, userId: string, userRole: UserRole, dto: UpdateListingDto) {
+    const listing = await this.prisma.listing.findUnique({ where: { id } });
+
+    if (!listing) {
+      throw new NotFoundException(`Listing with ID ${id} not found`);
+    }
+
+    // Ownership guard: a seller may only edit their own produce. Admins may edit any.
+    if (listing.farmerId !== userId && userRole !== UserRole.ADMIN) {
+      throw new ForbiddenException('You can only update your own listings');
+    }
+
+    // Build a partial update from ONLY the fields the seller actually sent, so
+    // omitted fields keep their current values instead of being wiped to null.
+    const data: any = {};
+    if (dto.title !== undefined) data.title = dto.title;
+    if (dto.description !== undefined) data.description = dto.description;
+    if (dto.price !== undefined) data.price = dto.price;
+    if (dto.quantity !== undefined) data.quantity = dto.quantity;
+    if (dto.unit !== undefined) data.unit = dto.unit;
+    if (dto.category !== undefined) data.category = dto.category.toUpperCase();
+    if (dto.imageUrl !== undefined) data.imageUrl = dto.imageUrl;
+    if (dto.harvestDate !== undefined) {
+      data.harvestDate = dto.harvestDate ? new Date(dto.harvestDate) : null;
+    }
+    if (dto.originCoordinates !== undefined) data.originCoordinates = dto.originCoordinates;
+    if (dto.qualityCertification !== undefined) data.qualityCertification = dto.qualityCertification;
+    if (dto.breed !== undefined) data.breed = dto.breed;
+    if (dto.healthRecords !== undefined) data.healthRecords = dto.healthRecords;
+    if (dto.weight !== undefined) data.weight = dto.weight;
+    if (dto.exportCompliant !== undefined) data.exportCompliant = dto.exportCompliant;
+
+    return this.prisma.listing.update({
+      where: { id },
+      data,
+    });
+  }
+
+  async findByFarmer(farmerId: string) {
+    return this.prisma.listing.findMany({
+      where: { farmerId },
+      include: {
+        farmer: {
+          select: {
+            id: true,
+            name: true,
+            phoneNumber: true,
+            email: true,
+            region: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async remove(id: string, userId: string, userRole: UserRole) {
+    const listing = await this.prisma.listing.findUnique({ where: { id } });
+
+    if (!listing) {
+      throw new NotFoundException(`Listing with ID ${id} not found`);
+    }
+
+    // Ownership guard: a seller may only delete their own produce. Admins may delete any.
+    if (listing.farmerId !== userId && userRole !== UserRole.ADMIN) {
+      throw new ForbiddenException('You can only delete your own listings');
+    }
+
+    await this.prisma.listing.delete({ where: { id } });
+
+    return { success: true };
   }
 
   async findAll(filters: { category?: string; search?: string; exportCompliant?: boolean }) {

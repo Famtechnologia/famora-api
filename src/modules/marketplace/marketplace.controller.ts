@@ -1,7 +1,8 @@
-import { Controller, Post, Get, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Post, Get, Patch, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { MarketplaceService } from './marketplace.service';
 import { CreateListingDto } from './dto/create-listing.dto';
+import { UpdateListingDto } from './dto/update-listing.dto';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { SyncOfflineDto } from './dto/sync-offline.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -48,6 +49,19 @@ export class MarketplaceController {
     return this.marketplaceService.findAll({ category, search, exportCompliant: isExportCompliant });
   }
 
+  @Get('my-listings')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({
+    summary: "Retrieve the authenticated seller's own listings",
+    description: 'Returns every listing owned by the current user, newest first. Powers the seller\'s "My Listings" dashboard.',
+  })
+  @ApiResponse({ status: 200, description: 'Seller listings fetched successfully.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  async getMyListings(@CurrentUser() user: User) {
+    return this.marketplaceService.findByFarmer(user.id);
+  }
+
   @Get('listings/:id')
   @ApiOperation({
     summary: 'Get details of a single listing',
@@ -57,6 +71,44 @@ export class MarketplaceController {
   @ApiResponse({ status: 404, description: 'Listing not found.' })
   async getListing(@Param('id') id: string) {
     return this.marketplaceService.findOne(id);
+  }
+
+  @Patch('listings/:id')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.FARMER, UserRole.LIVESTOCK_PRODUCER, UserRole.ADMIN)
+  @ApiOperation({
+    summary: 'Update an existing marketplace listing',
+    description:
+      'Edits produce details (price, quantity, description, image, etc.) on an existing listing. ' +
+      'Only the owning seller (or an Admin) may update it. Accepts a partial payload — omitted fields are left unchanged.',
+  })
+  @ApiResponse({ status: 200, description: 'Listing updated successfully.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized JWT.' })
+  @ApiResponse({ status: 403, description: 'Forbidden (not the owner, or incorrect role).' })
+  @ApiResponse({ status: 404, description: 'Listing not found.' })
+  async updateListing(
+    @CurrentUser() user: User,
+    @Param('id') id: string,
+    @Body() dto: UpdateListingDto,
+  ) {
+    return this.marketplaceService.update(id, user.id, user.role, dto);
+  }
+
+  @Delete('listings/:id')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.FARMER, UserRole.LIVESTOCK_PRODUCER, UserRole.ADMIN)
+  @ApiOperation({
+    summary: 'Delete a marketplace listing',
+    description: 'Removes a listing. Only the owning seller (or an Admin) may delete it.',
+  })
+  @ApiResponse({ status: 200, description: 'Listing deleted successfully.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized JWT.' })
+  @ApiResponse({ status: 403, description: 'Forbidden (not the owner, or incorrect role).' })
+  @ApiResponse({ status: 404, description: 'Listing not found.' })
+  async deleteListing(@CurrentUser() user: User, @Param('id') id: string) {
+    return this.marketplaceService.remove(id, user.id, user.role);
   }
 
   @Post('orders')
