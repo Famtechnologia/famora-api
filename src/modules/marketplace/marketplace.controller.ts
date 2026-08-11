@@ -39,14 +39,25 @@ export class MarketplaceController {
   @ApiQuery({ name: 'category', required: false, description: 'Filter by category (e.g. GRAINS, VEGETABLES, LIVESTOCK)' })
   @ApiQuery({ name: 'search', required: false, description: 'Text search inside title or breed fields' })
   @ApiQuery({ name: 'exportCompliant', required: false, type: Boolean, description: 'Filter only export-ready listings' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Max number of listings to return (1-100)' })
+  @ApiQuery({ name: 'cursor', required: false, description: 'Id of the last listing from the previous page (cursor pagination)' })
   @ApiResponse({ status: 200, description: 'Listings fetched successfully.' })
   async getListings(
     @Query('category') category?: string,
     @Query('search') search?: string,
     @Query('exportCompliant') exportCompliant?: string,
+    @Query('limit') limit?: string,
+    @Query('cursor') cursor?: string,
   ) {
     const isExportCompliant = exportCompliant === 'true' ? true : exportCompliant === 'false' ? false : undefined;
-    return this.marketplaceService.findAll({ category, search, exportCompliant: isExportCompliant });
+    const parsedLimit = limit ? Number(limit) : undefined;
+    return this.marketplaceService.findAll({
+      category,
+      search,
+      exportCompliant: isExportCompliant,
+      limit: Number.isFinite(parsedLimit) ? parsedLimit : undefined,
+      cursor,
+    });
   }
 
   @Get('my-listings')
