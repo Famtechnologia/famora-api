@@ -18,7 +18,15 @@ async function bootstrap() {
     }),
   );
 
-  app.enableCors();
+  // Restrict CORS to the known Famora frontends (and Vercel previews) instead
+  // of reflecting every origin. Non-browser callers (no Origin header) are
+  // allowed through; this is a Bearer-token API so CORS is defence-in-depth.
+  const allowedOrigin =
+    /(^https:\/\/([a-z0-9-]+\.)*famtech\.llc$)|(\.vercel\.app$)|(^http:\/\/localhost(:\d+)?$)/i;
+  app.enableCors({
+    origin: (origin, cb) => cb(null, !origin || allowedOrigin.test(origin)),
+    credentials: true,
+  });
 
   // Serve static public assets (for local upload fallback)
   app.useStaticAssets(join(process.cwd(), 'public'));
