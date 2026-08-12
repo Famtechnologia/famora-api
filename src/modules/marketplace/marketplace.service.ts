@@ -172,6 +172,11 @@ export class MarketplaceService {
 
   async createOrder(buyerId: string, dto: CreateOrderDto) {
     const listing = await this.findOne(dto.listingId);
+
+    if (listing.farmerId === buyerId) {
+      throw new BadRequestException('You cannot purchase your own listing');
+    }
+
     const totalPrice = listing.price * dto.quantity;
 
     // Transaction: atomically deduct stock, then create the order.

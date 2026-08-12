@@ -9,11 +9,12 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { AuctionsService } from './auctions.service';
+import { JwtService } from '@nestjs/jwt';
 import { Logger } from '@nestjs/common';
 
 @WebSocketGateway({
   cors: {
-    origin: '*',
+    origin: /(^https:\/\/([a-z0-9-]+\.)*famtech\.llc$)|(\.vercel\.app$)|(^http:\/\/localhost(:\d+)?$)/i,
   },
   namespace: 'auctions',
 })
@@ -23,10 +24,34 @@ export class AuctionsGateway implements OnGatewayConnection, OnGatewayDisconnect
 
   private readonly logger = new Logger(AuctionsGateway.name);
 
-  constructor(private readonly auctionsService: AuctionsService) {}
+  constructor(
+    private readonly auctionsService: AuctionsService,
+    private readonly jwtService: JwtService,
+  ) {}
 
   handleConnection(client: Socket) {
-    this.logger.log(`WS Client connected: ${client.id}`);
+    // Authenticate the socket from its handshake token. Without a valid token
+    // the connection is refused, so a client can never place a bid as someone
+    // else — the bidder identity comes from the verified token, not the payload.
+    const raw =
+      (client.handshake.auth?.token as string | undefined) ??
+      (client.handshake.headers?.authorization as string | undefined);
+    const token = raw?.replace(/^Bearer\s+/i, '');
+
+    if (!token) {
+      this.logger.warn(`WS Client rejected (no token): ${client.id}`);
+      client.disconnect(true);
+      return;
+    }
+
+    try {
+      const payload = this.jwtService.verify(token);
+      client.data.userId = payload.sub;
+      this.logger.log(`WS Client connected: ${client.id} (user ${payload.sub})`);
+    } catch {
+      this.logger.warn(`WS Client rejected (invalid token): ${client.id}`);
+      client.disconnect(true);
+    }
   }
 
   handleDisconnect(client: Socket) {
@@ -45,16 +70,21 @@ export class AuctionsGateway implements OnGatewayConnection, OnGatewayDisconnect
     @ConnectedSocket() client: Socket,
     @MessageBody() data: {
       auctionId: string;
-      bidderId: string;
       amount: number;
       isProxy?: boolean;
       maxProxyAmount?: number;
     },
   ) {
+    // Bidder identity comes from the authenticated socket, never the payload.
+    const bidderId = client.data?.userId as string | undefined;
+    if (!bidderId) {
+      return { status: 'ERROR', message: 'Unauthorized' };
+    }
+
     try {
       const result = await this.auctionsService.placeBid(
         data.auctionId,
-        data.bidderId,
+        bidderId,
         data.amount,
         data.isProxy,
         data.maxProxyAmount,

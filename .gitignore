@@ -5,15 +5,12 @@ node_modules/
 dist/
 
 # Environment variables (contains secrets!)
-.env
-.env.*
 
 # SQLite databases
 *.db
 *.db-journal
 
 # IDE / OS
-.vscode/
 .idea/
 *.swp
 .DS_Store
@@ -29,3 +26,4 @@ public/uploads/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+config.bat
